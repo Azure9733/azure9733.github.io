@@ -505,7 +505,7 @@ function showLocationWarning() {
 }
 
 // Flag to determine if map should follow user position
-let followUserPosition = true;
+let followUserPosition = false;
 
 // Get the tracking and simulate location buttons
 const trackingButton = document.getElementById('toggleTracking');
