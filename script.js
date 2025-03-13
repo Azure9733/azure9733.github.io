@@ -212,7 +212,7 @@ function addGeoJSONLayer(url, style, id) {
         style: function(feature) {
             return createLabeledStyle(feature, style);
         },
-        declutter: true // Enable label collision detection
+        declutter: true
     });
 
     layers[id] = vectorLayer;
@@ -444,8 +444,14 @@ function startPositionTracking() {
 
 
 document.addEventListener("DOMContentLoaded", function () {
-    // Your existing code here
-    startPositionTracking();  // Ensure this runs only after user interaction
+    startPositionTracking();  // Existing line
+    
+    // Info button toggle
+    const infoButton = document.getElementById('infoButton');
+    const creditsPopup = document.getElementById('creditsPopup');
+    infoButton.addEventListener('click', () => {
+        creditsPopup.classList.toggle('active');
+    });
 });
 
 // Show warning when user is far from the mapped area
