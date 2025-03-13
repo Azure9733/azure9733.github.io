@@ -9,14 +9,18 @@ const createStyle = (color, strokeColor, strokeWidth = 2) => {
             width: strokeWidth
         }),
         text: new ol.style.Text({
-            font: '12px Calibri,sans-serif',
+            font: '14px "Open Sans", "Arial Unicode MS", sans-serif',
             fill: new ol.style.Fill({ color: '#000' }),
             stroke: new ol.style.Stroke({
                 color: '#fff',
-                width: 3
+                width: 4
             }),
             overflow: true,
-            offsetY: -15
+            offsetY: -15,
+            padding: [5, 5, 5, 5],
+
+            textAlign: 'center',
+            textBaseline: 'middle'
         })
     });
 };
@@ -29,20 +33,50 @@ const styles = {
     mess: createStyle('rgba(255, 0, 0, 0.2)', 'rgba(255, 0, 0, 1)'),
     parking: createStyle('rgba(128, 128, 128, 0.2)', 'rgba(128, 128, 128, 1)'),
     sports: createStyle('rgba(147, 112, 219, 0.2)', 'rgba(147, 112, 219, 1)'),
+    shops: createStyle('rgba(255, 140, 0, 0.2)', 'rgba(255, 140, 0, 1)'),
     temple: createStyle('rgba(139, 69, 19, 0.2)', 'rgba(139, 69, 19, 1)'),
     walkways: new ol.style.Style({
         stroke: new ol.style.Stroke({
             color: '#8B4513',
             width: 2
+        }),
+        text: new ol.style.Text({
+            font: '14px "Open Sans", "Arial Unicode MS", sans-serif',
+            fill: new ol.style.Fill({ color: '#000' }),
+            stroke: new ol.style.Stroke({
+                color: '#fff',
+                width: 4
+            }),
+            overflow: true,
+            offsetY: -10,
+            padding: [5, 5, 5, 5],
+            textAlign: 'center',
+            textBaseline: 'middle',
+            placement: 'line'
         })
     }),
     circles: createStyle('rgba(169, 169, 169, 0.2)', 'rgba(169, 169, 169, 1)'),
-    roads_main: new ol.style.Style({
+    roads_main: new ol.style.Style
+    ({
         stroke: new ol.style.Stroke({
             color: '#333333',
             width: 3,
             lineCap: 'round',
             lineJoin: 'round'
+        }),
+        text: new ol.style.Text({
+            font: '14px "Open Sans", "Arial Unicode MS", sans-serif',
+            fill: new ol.style.Fill({ color: '#000' }),
+            stroke: new ol.style.Stroke({
+                color: '#fff',
+                width: 4
+            }),
+            overflow: true,
+            offsetY: -10,
+            padding: [5, 5, 5, 5],
+            textAlign: 'center',
+            textBaseline: 'middle',
+            placement: 'line'
         })
     }),
     roads_second: new ol.style.Style({
@@ -51,7 +85,8 @@ const styles = {
             width: 2,
             lineCap: 'round',
             lineJoin: 'round'
-        })
+        }),
+
     }),
     under_construction: new ol.style.Style({
         fill: new ol.style.Fill({
@@ -61,6 +96,19 @@ const styles = {
             color: '#FFD700',
             width: 2,
             lineDash: [10, 10]
+        }),
+        text: new ol.style.Text({
+            font: '14px "Open Sans", "Arial Unicode MS", sans-serif',
+            fill: new ol.style.Fill({ color: '#000' }),
+            stroke: new ol.style.Stroke({
+                color: '#fff',
+                width: 4
+            }),
+            overflow: true,
+            offsetY: -10,
+            padding: [5, 5, 5, 5],
+            textAlign: 'center',
+            textBaseline: 'middle'
         })
     }),
     tree: new ol.style.Style({
@@ -75,11 +123,45 @@ const styles = {
 
 // Function to create style with label
 function createLabeledStyle(feature, baseStyle) {
-    const name = feature.get('name');
-    if (!name) return baseStyle;
+    const shops = feature.get('Shops');
+    const sports = feature.get('Sports');
+    const nameNum = feature.get('Name/Num');
+    const name = feature.get('Name');
 
     const style = baseStyle.clone();
-    style.getText().setText(name);
+    
+    // Create text style if it doesn't exist
+    let text = style.getText();
+    if (!text) {
+        text = new ol.style.Text({
+            font: '14px "Open Sans", "Arial Unicode MS", sans-serif',
+            textAlign: 'center',
+            textBaseline: 'middle'
+        });
+        style.setText(text);
+    }
+    
+    // Prioritize Shops and Sports properties, then Name/Num
+    if (shops) {
+        text.setText(shops);
+    } else if (sports) {
+        text.setText(sports);
+    } else if (nameNum) {
+        text.setText(nameNum);
+    } else if (name) {
+        text.setText(name);
+
+    } else {
+        return baseStyle;
+    }
+    
+    // Preserve line placement for roads, use point placement for others
+    const featureType = feature.get('type') || '';
+    if (!featureType.includes('road') && !featureType.includes('walkway')) {
+        text.setPlacement('point');
+    }
+    text.setOverflow(true);
+    
     return style;
 }
 
@@ -92,7 +174,7 @@ const map = new ol.Map({
         zoom: 17,
         minZoom: 16,
         maxZoom: 19,
-        constrainRotation: true
+        constrainRotation: false // Allow map rotation
     }),
     controls: [
         new ol.control.ScaleLine({
@@ -100,6 +182,17 @@ const map = new ol.Map({
         })
     ]
 });
+
+// Load events data
+let eventsData = [];
+fetch('data/revels_events.json')
+    .then(response => response.json())
+    .then(data => {
+        if (data.ok) {
+            eventsData = data.data;
+        }
+    })
+    .catch(error => console.error('Error loading events:', error));
 
 // Vector Sources Array and Layers Object
 const vectorSources = [];
@@ -118,7 +211,8 @@ function addGeoJSONLayer(url, style, id) {
         source: vectorSource,
         style: function(feature) {
             return createLabeledStyle(feature, style);
-        }
+        },
+        declutter: true // Enable label collision detection
     });
 
     layers[id] = vectorLayer;
@@ -137,12 +231,13 @@ function addGeoJSONLayer(url, style, id) {
 
 // Add Layers
 const layerConfigs = {
-    academic: { url: 'data/Academic Blocks.geojson', style: styles.academic },
+    academic: { url: 'data/Academic_Blocks.geojson', style: styles.academic },
     grass: { url: 'data/Grasscover.geojson', style: styles.grass },
     hostel: { url: 'data/Hostels.geojson', style: styles.hostel },
     mess: { url: 'data/Mess.geojson', style: styles.mess },
     parking: { url: 'data/Parking.geojson', style: styles.parking },
     sports: { url: 'data/Sports.geojson', style: styles.sports },
+    shops: { url: 'data/Shops.geojson', style: styles.shops },
     temple: { url: 'data/temple.geojson', style: styles.temple },
     tree: { url: 'data/Trees.geojson', style: styles.tree },
     walkways: { url: 'data/walkways.geojson', style: styles.walkways },
@@ -156,6 +251,286 @@ const layerConfigs = {
 Object.entries(layerConfigs).forEach(([id, config]) => {
     addGeoJSONLayer(config.url, config.style, id);
 });
+
+// Add location pointer for "MIT Ground"
+const sportsSource = layers.sports.getSource();
+sportsSource.once('change', function() {
+    if (sportsSource.getState() === 'ready') {
+        const mitGround = sportsSource.getFeatures().find(feature => 
+            feature.get('Sports') === 'MIT Ground'
+        );
+        if (mitGround) {
+            const geometry = mitGround.getGeometry();
+            const centroid = ol.extent.getCenter(geometry.getExtent());
+
+            const pointer = new ol.Feature({
+                geometry: new ol.geom.Point(centroid),
+            });
+            pointer.setStyle(new ol.style.Style({
+                image: new ol.style.Icon({
+                    src: 'https://cdn-icons-png.flaticon.com/512/684/684908.png', // Free pin icon
+                    scale: 0.05, // Adjust size as needed
+                    anchor: [0.5, 1], // Bottom-center of the pin
+                }),
+            }));
+
+            pointerSource.addFeature(pointer);
+        }
+    }
+});
+// Add pointers for additional event locations
+const additionalLocations = [
+    { layerId: 'shops', property: 'Shops', value: 'Student Plaza' },
+    { layerId: 'academic', property: 'Name', value: 'AB1' },
+    { layerId: 'academic', property: 'Name', value: 'AB2' },
+    { layerId: 'academic', property: 'Name', value: 'AB3' },
+    { layerId: 'academic', property: 'Name', value: 'AB5' },
+    { layerId: 'academic', property: 'Name', value: 'Library' },
+    { layerId: 'academic', property: 'Name', value: 'KEF R&D Centre' },
+];
+
+additionalLocations.forEach(location => {
+    const source = layers[location.layerId].getSource();
+    source.once('change', function() {
+        if (source.getState() === 'ready') {
+            const feature = source.getFeatures().find(f => 
+                f.get(location.property) === location.value
+            );
+            if (feature) {
+                const geometry = feature.getGeometry();
+                const centroid = ol.extent.getCenter(geometry.getExtent());
+                const pointer = new ol.Feature({
+                    geometry: new ol.geom.Point(centroid),
+                    name: location.value, // Store for reference
+                });
+                pointer.setStyle(new ol.style.Style({
+                    image: new ol.style.Icon({
+                        src: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
+                        scale: 0.05,
+                        anchor: [0.5, 1],
+                    }),
+                }));
+                pointerSource.addFeature(pointer);
+            }
+        }
+    });
+});
+
+// Click handler for pointers
+map.on('click', function(event) {
+    const feature = map.forEachFeatureAtPixel(event.pixel, function(feat, layer) {
+        return layer === pointerLayer ? feat : null; // Only detect pointerLayer features
+    });
+
+    if (feature) {
+        const locationName = feature.get('name');
+        showEventsPopup(locationName);
+    } else {
+        const popup = document.getElementById('eventsPopup');
+        popup.classList.remove('active');
+    }
+});
+
+// User Position Tracking
+let userPositionSource = new ol.source.Vector();
+let userPositionLayer = new ol.layer.Vector({
+    source: userPositionSource,
+    style: new ol.style.Style({
+        image: new ol.style.Circle({
+            radius: 8,
+            fill: new ol.style.Fill({
+                color: 'rgb(188,20,20)'
+            }),
+            stroke: new ol.style.Stroke({
+                color: '#322d2d',
+                width: 5
+            })
+        })
+    }),
+    zIndex: 1000 // Make sure user position is on top of other layers
+});
+
+// Add user position layer to map
+map.addLayer(userPositionLayer);
+
+// Pointer layer for event tracking
+const pointerSource = new ol.source.Vector();
+const pointerLayer = new ol.layer.Vector({
+    source: pointerSource,
+    zIndex: 1001 // Above other layers, including user position
+});
+map.addLayer(pointerLayer);
+
+// User position tracking feature
+let userPositionFeature = new ol.Feature();
+userPositionSource.addFeature(userPositionFeature);
+
+// Position accuracy feature (circle around the position point)
+let accuracyFeature = new ol.Feature();
+userPositionSource.addFeature(accuracyFeature);
+
+// Store the map extent for reference
+let mapExtent = null;
+
+// Geolocation API setup
+const geolocation = new ol.Geolocation({
+    trackingOptions: {
+        enableHighAccuracy: true
+    },
+    projection: map.getView().getProjection()
+});
+
+// Check if a position is within or near the map extent
+function isPositionNearMapExtent(coordinates) {
+    if (!mapExtent) return true; // If we don't have map extent yet, assume it's fine
+    
+    // Create a buffered extent (much larger than the actual map extent)
+    const buffer = 5000; // Increased buffer in meters (was 1000)
+    const bufferedExtent = [
+        mapExtent[0] - buffer,
+        mapExtent[1] - buffer,
+        mapExtent[2] + buffer,
+        mapExtent[3] + buffer
+    ];
+    
+    // Check if the position is within the buffered extent
+    return ol.extent.containsCoordinate(bufferedExtent, coordinates);
+}
+
+// Start tracking position
+function startPositionTracking() {
+    geolocation.setTracking(true);
+    
+    // Handle position change
+    geolocation.on('change:position', function() {
+        const coordinates = geolocation.getPosition();
+        if (coordinates) {
+            userPositionFeature.setGeometry(coordinates ? 
+                new ol.geom.Point(coordinates) : null);
+            
+            // Center map on user position if tracking is active
+            if (followUserPosition) {
+                if (isPositionNearMapExtent(coordinates)) {
+                    map.getView().animate({
+                        center: coordinates,
+                        duration: 500
+                    });
+                } else {
+                    // If user is far from map extent, show notification and disable following
+                    // but still keep the map visible
+                    showLocationWarning();
+                    followUserPosition = false;
+                    trackingButton.classList.remove('active');
+                    
+                    // Ensure map is still visible by fitting to features
+                    fitMapToFeatures();
+                }
+            }
+        }
+    });
+    
+    // Handle accuracy change
+    geolocation.on('change:accuracyGeometry', function() {
+        accuracyFeature.setGeometry(geolocation.getAccuracyGeometry());
+    });
+    
+    // Handle error
+    geolocation.on('error', function(error) {
+        console.error('Geolocation error:', error);
+        // Don't show alert, just make sure map is visible
+        fitMapToFeatures();
+    });
+}
+
+
+document.addEventListener("DOMContentLoaded", function () {
+    // Your existing code here
+    startPositionTracking();  // Ensure this runs only after user interaction
+});
+
+// Show warning when user is far from the mapped area
+function showLocationWarning() {
+    // Create notification element if it doesn't exist
+    let notification = document.getElementById('location-notification');
+    if (!notification) {
+        notification = document.createElement('div');
+        notification.id = 'location-notification';
+        notification.className = 'location-notification';
+        document.querySelector('.game-container').appendChild(notification);
+        
+        // Add styles for the notification if not already in CSS
+        const style = document.createElement('style');
+        style.textContent = `
+            .location-notification {
+                position: absolute;
+                top: 70px;
+                left: 50%;
+                transform: translateX(-50%);
+                background-color: rgba(0, 0, 0, 0.8);
+                color: white;
+                padding: 10px 20px;
+                border-radius: 5px;
+                z-index: 1001;
+                text-align: center;
+                max-width: 80%;
+                animation: fadeInOut 5s forwards;
+            }
+            @keyframes fadeInOut {
+                0% { opacity: 0; }
+                10% { opacity: 1; }
+                80% { opacity: 1; }
+                100% { opacity: 0; display: none; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    notification.textContent = 'You are far from the mapped area. Map view has been centered on the campus.';
+    notification.style.animation = 'none';
+    notification.offsetHeight; // Trigger reflow
+    notification.style.animation = 'fadeInOut 5s forwards';
+    
+    // Remove notification after animation completes
+    setTimeout(() => {
+        if (notification && notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+        }
+    }, 5000);
+}
+
+// Flag to determine if map should follow user position
+let followUserPosition = true;
+
+// Get the tracking and simulate location buttons
+const trackingButton = document.getElementById('toggleTracking');
+
+// Toggle position tracking
+trackingButton.addEventListener('click', () => {
+    followUserPosition = !followUserPosition;
+    trackingButton.classList.toggle('active');
+    
+    if (followUserPosition && geolocation.getPosition()) {
+        const coordinates = geolocation.getPosition();
+        if (isPositionNearMapExtent(coordinates)) {
+            map.getView().animate({
+                center: coordinates,
+                duration: 500
+            });
+        } else {
+            showLocationWarning();
+            followUserPosition = false;
+            trackingButton.classList.remove('active');
+            
+            // Ensure map is still visible by fitting to features
+            fitMapToFeatures();
+        }
+    } else {
+        // If tracking is disabled, ensure map is centered on features
+        fitMapToFeatures();
+    }
+});
+
+
 
 // Fit Map to Features
 function fitMapToFeatures() {
@@ -175,6 +550,9 @@ function fitMapToFeatures() {
                 loadedSources++;
                 
                 if (loadedSources === vectorSources.length) {
+                    // Store the map extent for reference
+                    mapExtent = extent;
+                    
                     const view = map.getView();
                     view.fit(extent, {
                         padding: [50, 50, 50, 50],
@@ -187,13 +565,57 @@ function fitMapToFeatures() {
         });
     });
 
-    // Fallback: render after a short delay if sources don’t load
+    // Fallback: render after a short delay if sources don't load
     setTimeout(() => {
         if (loadedSources === 0) {
             map.render();
         }
     }, 500);
 }
+
+// Function to initialize rotation controls
+function initRotationControls() {
+    // Get the north arrow element
+    const northArrow = document.getElementById('northArrow');
+    
+    // Update north arrow based on map rotation
+    function updateNorthArrow() {
+        const rotation = map.getView().getRotation();
+        const rotationDegrees = +rotation * 180 / Math.PI;
+        northArrow.style.transform = `rotate(${rotationDegrees}deg)`;
+    }
+
+    // Update arrow on map render
+    map.on('postrender', updateNorthArrow);
+
+    // Direct event listeners for rotation buttons
+    document.getElementById('rotateLeft').onclick = function() {
+        const view = map.getView();
+        view.animate({
+            rotation: view.getRotation() - Math.PI / 6,
+            duration: 250
+        });
+    };
+
+    document.getElementById('rotateRight').onclick = function() {
+        const view = map.getView();
+        view.animate({
+            rotation: view.getRotation() + Math.PI / 6,
+            duration: 250
+        });
+    };
+
+    document.getElementById('resetRotation').onclick = function() {
+        const view = map.getView();
+        view.animate({
+            rotation: 0,
+            duration: 250
+        });
+    };
+}
+
+// Initialize rotation controls after map is fully loaded
+map.once('postrender', initRotationControls);
 
 // UI Controls
 const legendPanel = document.getElementById('legendPanel');
@@ -220,9 +642,7 @@ document.getElementById('closeLegend').addEventListener('click', () => {
     legendPanel.classList.remove('active');
 });
 
-document.getElementById('closePopup').addEventListener('click', () => {
-    locationPopup.classList.remove('active');
-});
+
 
 // Zoom Controls
 document.getElementById('zoomIn').addEventListener('click', (event) => {
@@ -301,7 +721,7 @@ searchInput.addEventListener('input', (e) => {
 
 // Show Feature Popup (Updated to use sidebar)
 function showFeaturePopup(feature) {
-    const name = feature.get('name') || 'Unnamed Location';
+    const name = feature.get('Name') || 'Unnamed Location';
     const description = feature.get('description') || 'No description available';
 
     popupTitle.textContent = name;
@@ -345,3 +765,56 @@ setInterval(updateTime, 1000);
 // Initialize Map
 fitMapToFeatures();
 updateTime();
+
+// Show events popup
+function showEventsPopup(locationName) {
+    const relevantEvents = eventsData.filter(event => 
+        (event.Name && event.Name === locationName) ||
+        (event.Shops && event.Shops === locationName) ||
+        (event.Sports && event.Sports === locationName)
+    );
+
+    const popup = document.getElementById('eventsPopup');
+    const content = document.getElementById('eventsContent');
+
+    // Clear previous content
+    content.innerHTML = '';
+
+    // Build events list
+    content.innerHTML = `
+        <h2>Events at ${locationName}</h2>
+        <ul class="events-list">
+            ${relevantEvents.map(event => `
+                <li class="event-item" onclick="showEventDetails('${event.event_name.replace(/'/g, "\\'")}', '${locationName.replace(/'/g, "\\'")}')">
+                    <strong>${event.event_name}</strong><br>
+                    ${new Date(event.event_date).toLocaleDateString()} ${event.event_time}
+                </li>
+            `).join('')}
+        </ul>
+    `;
+
+    popup.classList.add('active');
+}
+
+// Show event details
+function showEventDetails(eventName, locationName) {
+    const event = eventsData.find(e => 
+        e.event_name === eventName && (
+            (e.Name && e.Name === locationName) ||
+            (e.Shops && e.Shops === locationName) ||
+            (e.Sports && e.Sports === locationName)
+        )
+    );
+
+    const content = document.getElementById('eventsContent');
+    content.innerHTML = `
+        <h2>${event.event_name}</h2>
+        <p><strong>Type:</strong> ${event.event_type}</p>
+        <p><strong>Description:</strong> ${event.event_desc.replace(/\n/g, '<br>')}</p>
+        <p><strong>Date:</strong> ${new Date(event.event_date).toLocaleDateString()}</p>
+        <p><strong>Time:</strong> ${event.event_time}</p>
+        <p><strong>Venue:</strong> ${event.venue_name}</p>
+        <p><strong>Team Type:</strong> ${event.team_type}</p>
+        <button onclick="showEventsPopup('${locationName.replace(/'/g, "\\'")}')">Back to Events</button>
+    `;
+}
