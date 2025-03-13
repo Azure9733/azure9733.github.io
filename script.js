@@ -510,12 +510,10 @@ let followUserPosition = false;
 // Get the tracking and simulate location buttons
 const trackingButton = document.getElementById('toggleTracking');
 
-// Toggle position tracking
+// Replace the tracking button event listener with this:
 trackingButton.addEventListener('click', () => {
-    followUserPosition = !followUserPosition;
-    trackingButton.classList.toggle('active');
-    
-    if (followUserPosition && geolocation.getPosition()) {
+    // Always center on current position when clicked
+    if (geolocation.getPosition()) {
         const coordinates = geolocation.getPosition();
         if (isPositionNearMapExtent(coordinates)) {
             map.getView().animate({
@@ -524,16 +522,23 @@ trackingButton.addEventListener('click', () => {
             });
         } else {
             showLocationWarning();
-            followUserPosition = false;
-            trackingButton.classList.remove('active');
-            
-            // Ensure map is still visible by fitting to features
             fitMapToFeatures();
         }
     } else {
-        // If tracking is disabled, ensure map is centered on features
         fitMapToFeatures();
     }
+
+    // Optionally toggle visual active state without changing functionality
+    trackingButton.classList.add('active');
+    setTimeout(() => {
+        trackingButton.classList.remove('active');
+    }, 1000);
+});
+
+// Add this after the tracking button code
+map.on('pointerdrag', function() {
+    // User is manually panning, disable following
+    followUserPosition = false;
 });
 
 
