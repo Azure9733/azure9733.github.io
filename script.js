@@ -407,25 +407,15 @@ function startPositionTracking() {
         if (coordinates) {
             userPositionFeature.setGeometry(coordinates ? 
                 new ol.geom.Point(coordinates) : null);
-            
-            // Center map on user position if tracking is active
-            if (followUserPosition) {
-                if (isPositionNearMapExtent(coordinates)) {
-                    map.getView().animate({
-                        center: coordinates,
-                        duration: 500
-                    });
-                } else {
-                    // If user is far from map extent, show notification and disable following
-                    // but still keep the map visible
-                    showLocationWarning();
-                    followUserPosition = false;
-                    trackingButton.classList.remove('active');
-                    
-                    // Ensure map is still visible by fitting to features
-                    fitMapToFeatures();
-                }
+            // Do NOT recenter the map to the user if they are far away
+            // Only recenter if followUserPosition is true AND user is near the campus
+            if (followUserPosition && isPositionNearMapExtent(coordinates)) {
+                map.getView().animate({
+                    center: coordinates,
+                    duration: 500
+                });
             }
+            // If user is far, just show the marker, do not recenter
         }
     });
     
@@ -452,6 +442,14 @@ document.addEventListener("DOMContentLoaded", function () {
     infoButton.addEventListener('click', () => {
         creditsPopup.classList.toggle('active');
     });
+
+    // Attach close event for events popup
+    const closeEventsPopupBtn = document.getElementById('closeEventsPopup');
+    if (closeEventsPopupBtn) {
+        closeEventsPopupBtn.addEventListener('click', function() {
+            document.getElementById('eventsPopup').classList.remove('active');
+        });
+    }
 });
 
 // Show warning when user is far from the mapped area
@@ -645,7 +643,7 @@ document.getElementById('toggleLegend').addEventListener('click', () => {
 });
 
 document.getElementById('toggleSearch').addEventListener('click', () => {
-    searchPanel.classList.toggle('active');
+    searchPanel.classList.add('active');
     legendPanel.classList.remove('active');
 });
 
@@ -685,13 +683,15 @@ const searchResults = document.getElementById('searchResults');
 
 function createSearchIndex() {
     const searchIndex = [];
+    // Add places
     Object.values(layers).forEach(layer => {
         const source = layer.getSource();
         if (source) {
             source.getFeatures().forEach(feature => {
-                const name = feature.get('name');
+                const name = feature.get('Name') || feature.get('Shops') || feature.get('Sports') || feature.get('Name/Num');
                 if (name) {
                     searchIndex.push({
+                        type: 'place',
                         name: name,
                         feature: feature
                     });
@@ -699,33 +699,84 @@ function createSearchIndex() {
             });
         }
     });
+    // Add events
+    eventsData.forEach(event => {
+        if (event.event_name) {
+            // Use event_name as the searchable name
+            // Also store the location name for opening the sidebar
+            const locationName = event.Name || event.Shops || event.Sports;
+            searchIndex.push({
+                type: 'event',
+                name: event.event_name,
+                event: event,
+                locationName: locationName
+            });
+        }
+    });
     return searchIndex;
 }
 
 searchInput.addEventListener('input', (e) => {
-    const query = e.target.value.toLowerCase();
+    const query = e.target.value.trim().toLowerCase();
     const searchIndex = createSearchIndex();
     searchResults.innerHTML = '';
 
     if (query.length < 2) return;
 
-    const matches = searchIndex.filter(item => 
-        item.name.toLowerCase().includes(query)
+    // Find matches (case-insensitive, ignore extra spaces)
+    const matches = searchIndex.filter(item =>
+        item.name && item.name.toLowerCase().includes(query)
     );
+
+    if (matches.length === 0) {
+        // Show 'Place not found' if no matches
+        const div = document.createElement('div');
+        div.className = 'search-result-item';
+        div.textContent = 'Place or event not found';
+        div.style.color = 'red';
+        searchResults.appendChild(div);
+        return;
+    }
 
     matches.forEach(match => {
         const div = document.createElement('div');
         div.className = 'search-result-item';
-        div.textContent = match.name;
-        div.addEventListener('click', () => {
-            const extent = match.feature.getGeometry().getExtent();
-            map.getView().fit(extent, {
-                padding: [50, 50, 50, 50],
-                duration: 1000
+        if (match.type === 'place') {
+            div.textContent = match.name + ' (Place)';
+            div.addEventListener('click', () => {
+                const extent = match.feature.getGeometry().getExtent();
+                map.getView().fit(extent, {
+                    padding: [50, 50, 50, 50],
+                    duration: 1000,
+                    maxZoom: 19
+                });
+                showFeaturePopup(match.feature);
+                searchPanel.classList.remove('active');
             });
-            showFeaturePopup(match.feature);
-            searchPanel.classList.remove('active');
-        });
+        } else if (match.type === 'event') {
+            div.textContent = match.name + ' (Event)';
+            div.style.fontStyle = 'italic';
+            div.addEventListener('click', () => {
+                // Open the events sidebar for this event's location
+                if (match.locationName) {
+                    showEventsPopup(match.locationName);
+                } else {
+                    // If no location, just show the event details
+                    const content = document.getElementById('eventsContent');
+                    content.innerHTML = `
+                        <h2>${match.event.event_name}</h2>
+                        <p><strong>Type:</strong> ${match.event.event_type}</p>
+                        <p><strong>Description:</strong> ${match.event.event_desc.replace(/\n/g, '<br>')}</p>
+                        <p><strong>Date:</strong> ${new Date(match.event.event_date).toLocaleDateString()}</p>
+                        <p><strong>Time:</strong> ${match.event.event_time}</p>
+                        <p><strong>Venue:</strong> ${match.event.venue_name}</p>
+                        <p><strong>Team Type:</strong> ${match.event.team_type}</p>
+                    `;
+                    document.getElementById('eventsPopup').classList.add('active');
+                }
+                searchPanel.classList.remove('active');
+            });
+        }
         searchResults.appendChild(div);
     });
 });

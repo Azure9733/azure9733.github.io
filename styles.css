@@ -307,17 +307,22 @@ html, body {
 
 /* Close Button */
 .close-button {
-    background: var(--green);
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: transparent;
     border: none;
-    border-radius: 4px;
-    padding: 5px 10px;
+    font-size: 28px;
+    color: #333;
     cursor: pointer;
-    color: var(--black);
-    transition: var(--transition-speed);
+    z-index: 1001;
+    padding: 0 10px;
+    line-height: 1;
+    transition: color 0.2s;
 }
 
 .close-button:hover {
-    background: #7cc337;
+    color: rgb(0, 0, 0);
 }
 
 /* Legend Colors */
